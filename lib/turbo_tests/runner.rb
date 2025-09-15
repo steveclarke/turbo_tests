@@ -196,24 +196,37 @@ module TurboTests
               print(output) unless output.empty?
 
               message = result.shift
-              next unless message
+              # next unless message
+
+              if message
+                warn "* PID: #{process_id} | line: #{line} | result: #{result.inspect} | output: #{output.inspect} | message: #{message.inspect}" if @verbose
+              else
+                warn "* PID: #{process_id} | skipping line: #{line} | result: #{result.inspect} | output: #{output.inspect} | message: #{message.inspect}" if @verbose
+                next
+              end
 
               message = JSON.parse(message, symbolize_names: true)
               message[:process_id] = process_id
               @messages << message
             end
 
+            warn "* PID: #{process_id} | marking process to exit" if @verbose
             @messages << { type: "exit", process_id: process_id }
+          rescue => thread_error
+            warn "! Thread error | PID: #{process_id} | #{thread_error.class} | #{thread_error.message} | #{thread_error.backtrace} | #{env["RSPEC_FORMATTER_OUTPUT_ID"]}" if @verbose
           end
 
+        warn "* PID: #{process_id} | start copy thread" if @verbose
         @threads << start_copy_thread(stderr, STDERR)
 
+        warn "* PID: #{process_id} | << error" if @verbose
         @threads << Thread.new do
           unless wait_thr.value.success?
             @messages << { type: "error" }
           end
         end
 
+        warn "* PID: #{process_id} | return wait_thr" if @verbose
         wait_thr
       end
     end
