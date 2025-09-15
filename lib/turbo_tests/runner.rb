@@ -199,9 +199,9 @@ module TurboTests
               # next unless message
 
               if message
-                warn "* PID: #{process_id} | line: #{line} | result: #{result.inspect} | output: #{output.inspect} | message: #{message.inspect}" if @verbose
+                warn "* PID: #{process_id} | line: #{line.inspect} | result: #{result.inspect} | output: #{output.inspect} | message: #{message.inspect}" if @verbose
               else
-                warn "* PID: #{process_id} | skipping line: #{line} | result: #{result.inspect} | output: #{output.inspect} | message: #{message.inspect}" if @verbose
+                warn "* PID: #{process_id} | skipping line: #{line.inspect} | result: #{result.inspect} | output: #{output.inspect} | message: #{message.inspect}" if @verbose
                 next
               end
 
