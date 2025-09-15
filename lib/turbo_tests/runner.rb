@@ -193,7 +193,11 @@ module TurboTests
               result = line.split(env["RSPEC_FORMATTER_OUTPUT_ID"])
 
               output = result.shift
-              print(output) unless output.empty?
+
+              unless output.empty?
+                warn "* #{ts} | PID: #{process_id} | line: #{line.inspect} | result: #{result.inspect} | extra output: #{output.inspect}" if @verbose
+                print(output)
+              end
 
               message = result.shift
               # next unless message
