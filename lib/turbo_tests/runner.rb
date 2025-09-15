@@ -214,10 +214,11 @@ module TurboTests
             @messages << { type: "exit", process_id: process_id }
           rescue => thread_error
             warn "! Thread error | PID: #{process_id} | #{thread_error.class} | #{thread_error.message} | #{thread_error.backtrace} | #{env["RSPEC_FORMATTER_OUTPUT_ID"]}" if @verbose
+            raise thread_error
           end
 
         warn "* PID: #{process_id} | start copy thread" if @verbose
-        @threads << start_copy_thread(stderr, STDERR)
+        @threads << start_copy_thread(stderr, STDERR, process_id)
 
         warn "* PID: #{process_id} | << error" if @verbose
         @threads << Thread.new do
@@ -231,14 +232,18 @@ module TurboTests
       end
     end
 
-    def start_copy_thread(src, dst)
+    def start_copy_thread(src, dst, process_id)
       Thread.new do
         loop do
           msg = src.readpartial(4096)
+          warn "$ SCT [#{process_id}] | read | #{msg.inspect}" if @verbose
+          msg
         rescue EOFError
+          warn "$ SCT [#{process_id}] | EOFError" if @verbose
           src.close
           break
         else
+          warn "$ SCT [#{process_id}] | else | #{msg.inspect}" if @verbose
           dst.write(msg)
         end
       end
