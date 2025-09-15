@@ -89,27 +89,27 @@ module TurboTests
       }
 
       @reporter.report(tests_in_groups) do |reporter|
-        warn "* Before spawning subprocesses" if @verbose
+        warn "* #{ts} | Before spawning subprocesses" if @verbose
 
         wait_threads = tests_in_groups.map.with_index do |tests, process_id|
           start_regular_subprocess(tests, process_id + 1, **subprocess_opts)
         end
 
-        warn "* Before 'handle_messages'" if @verbose
+        warn "* #{ts} | Before 'handle_messages'" if @verbose
 
         handle_messages
 
-        warn "* After 'handle_messages'" if @verbose
+        warn "* #{ts} | After 'handle_messages'" if @verbose
 
         @threads.each(&:join)
 
-        warn "* After threads join" if @verbose
+        warn "* #{ts} | After threads join" if @verbose
 
         if @reporter.failed_examples.empty? && wait_threads.map(&:value).all?(&:success?)
-          warn "* Fast 0 return" if @verbose
+          warn "* #{ts} | Fast 0 return" if @verbose
           0
         else
-          warn "* Wait threads max" if @verbose
+          warn "* #{ts} | Wait threads max" if @verbose
 
           # From https://github.com/serpapi/turbo_tests/pull/20/
           wait_threads.map { |thread| thread.value.exitstatus }.max
@@ -181,7 +181,7 @@ module TurboTests
             command.join(" "),
           ].select { |x| x.size > 0 }.join(" ")
 
-          warn "Process #{process_id}: #{command_str}"
+          warn "+ #{ts} | Process #{process_id}: #{command_str}"
         end
 
         stdin, stdout, stderr, wait_thr = Open3.popen3(env, *command)
@@ -199,9 +199,9 @@ module TurboTests
               # next unless message
 
               if message
-                warn "* PID: #{process_id} | line: #{line.inspect} | result: #{result.inspect} | output: #{output.inspect} | message: #{message.inspect}" if @verbose
+                warn "* #{ts} | PID: #{process_id} | line: #{line.inspect} | result: #{result.inspect} | output: #{output.inspect} | message: #{message.inspect}" if @verbose
               else
-                warn "* PID: #{process_id} | skipping line: #{line.inspect} | result: #{result.inspect} | output: #{output.inspect} | message: #{message.inspect}" if @verbose
+                warn "* #{ts} | PID: #{process_id} | skipping line: #{line.inspect} | result: #{result.inspect} | output: #{output.inspect} | message: #{message.inspect}" if @verbose
                 next
               end
 
@@ -210,24 +210,24 @@ module TurboTests
               @messages << message
             end
 
-            warn "* PID: #{process_id} | marking process to exit" if @verbose
+            warn "* #{ts} | PID: #{process_id} | marking process to exit" if @verbose
             @messages << { type: "exit", process_id: process_id }
           rescue => thread_error
-            warn "! Thread error | PID: #{process_id} | #{thread_error.class} | #{thread_error.message} | #{thread_error.backtrace} | #{env["RSPEC_FORMATTER_OUTPUT_ID"]}" if @verbose
+            warn "! #{ts} | Thread error | PID: #{process_id} | #{thread_error.class} | #{thread_error.message} | #{thread_error.backtrace} | #{env["RSPEC_FORMATTER_OUTPUT_ID"]}" if @verbose
             raise thread_error
           end
 
-        warn "* PID: #{process_id} | start copy thread" if @verbose
+        warn "* #{ts} | PID: #{process_id} | start copy thread" if @verbose
         @threads << start_copy_thread(stderr, STDERR, process_id)
 
-        warn "* PID: #{process_id} | << error" if @verbose
+        warn "* #{ts} | PID: #{process_id} | << error" if @verbose
         @threads << Thread.new do
           unless wait_thr.value.success?
             @messages << { type: "error" }
           end
         end
 
-        warn "* PID: #{process_id} | return wait_thr" if @verbose
+        warn "* #{ts} | PID: #{process_id} | return wait_thr" if @verbose
         wait_thr
       end
     end
@@ -236,14 +236,14 @@ module TurboTests
       Thread.new do
         loop do
           msg = src.readpartial(4096)
-          warn "$ SCT [#{process_id}] | read | #{msg.inspect}" if @verbose
+          warn "$ #{ts} | SCT [#{process_id}] | read | #{msg.inspect}" if @verbose
           msg
         rescue EOFError
-          warn "$ SCT [#{process_id}] | EOFError" if @verbose
+          warn "$ #{ts} SCT [#{process_id}] | EOFError" if @verbose
           src.close
           break
         else
-          warn "$ SCT [#{process_id}] | else | #{msg.inspect}" if @verbose
+          warn "$ #{ts} | SCT [#{process_id}] | else | #{msg.inspect}" if @verbose
           dst.write(msg)
         end
       end
@@ -255,7 +255,7 @@ module TurboTests
       loop do
         message = @messages.pop
 
-        warn "> #{Time.now} | #{@messages.size} left | #{exited}/#{@num_processes} | #{message}" if @verbose
+        warn "> #{ts} | #{@messages.size} left | #{exited}/#{@num_processes} | #{message}" if @verbose
 
         case message[:type]
         when "example_passed"
@@ -278,7 +278,7 @@ module TurboTests
           @reporter.example_failed(example)
           @failure_count += 1
           if fail_fast_met
-            warn "* Loop: break via killing threads" if @verbose
+            warn "* #{ts} | Loop: break via killing threads" if @verbose
 
             @threads.each(&:kill)
             break
@@ -298,26 +298,30 @@ module TurboTests
         when "exit"
           exited += 1
           if exited == @num_processes
-            warn "* Loop: break via exited count" if @verbose
+            warn "* #{ts} | Loop: break via exited count" if @verbose
             break
           end
         else
-          warn "! Unhandled msg: #{message}" if @verbose
+          warn "! #{ts} | Unhandled msg: #{message}" if @verbose
           STDERR.puts("Unhandled message in main process: #{message}")
         end
 
         STDOUT.flush
       end
 
-      warn "* Loop is broken" if @verbose
+      warn "* #{ts} | Loop is broken" if @verbose
     rescue Interrupt => error
-      warn "! Interrupt | #{error.class} | #{error.message} | #{error.backtrace}" if @verbose
+      warn "! #{ts} | Interrupt | #{error.class} | #{error.message} | #{error.backtrace}" if @verbose
     rescue => other
-      warn "! Other error | #{other.class} | #{other.message} | #{other.backtrace}" if @verbose
+      warn "! #{ts} | Other error | #{other.class} | #{other.message} | #{other.backtrace}" if @verbose
     end
 
     def fail_fast_met
       !@fail_fast.nil? && @failure_count >= @fail_fast
+    end
+
+    def ts
+      Time.now.strftime("%Y-%m-%d %H:%M:%S.%6N %z")
     end
   end
 end
