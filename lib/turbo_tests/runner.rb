@@ -294,6 +294,8 @@ module TurboTests
       warn "* Loop is broken" if @verbose
     rescue Interrupt => error
       warn "! Interrupt | #{error.class} | #{error.message} | #{error.backtrace}" if @verbose
+    rescue => other
+      warn "! Other error | #{other.class} | #{other.message} | #{other.backtrace}" if @verbose
     end
 
     def fail_fast_met
