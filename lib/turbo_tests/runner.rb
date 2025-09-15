@@ -89,17 +89,28 @@ module TurboTests
       }
 
       @reporter.report(tests_in_groups) do |reporter|
+        warn "* Before spawning subprocesses" if @verbose
+
         wait_threads = tests_in_groups.map.with_index do |tests, process_id|
           start_regular_subprocess(tests, process_id + 1, **subprocess_opts)
         end
 
+        warn "* Before 'handle_messages'" if @verbose
+
         handle_messages
+
+        warn "* After 'handle_messages'" if @verbose
 
         @threads.each(&:join)
 
+        warn "* After threads join" if @verbose
+
         if @reporter.failed_examples.empty? && wait_threads.map(&:value).all?(&:success?)
+          warn "* Fast 0 return" if @verbose
           0
         else
+          warn "* Wait threads max" if @verbose
+
           # From https://github.com/serpapi/turbo_tests/pull/20/
           wait_threads.map { |thread| thread.value.exitstatus }.max
         end
@@ -226,9 +237,7 @@ module TurboTests
       loop do
         message = @messages.pop
 
-        if @verbose
-          warn "> #{Time.now} | #{message}"
-        end
+        warn "> #{Time.now} | #{@messages.size} left | #{exited}/#{@num_processes} | #{message}" if @verbose
 
         case message[:type]
         when "example_passed"
@@ -251,6 +260,8 @@ module TurboTests
           @reporter.example_failed(example)
           @failure_count += 1
           if fail_fast_met
+            warn "* Loop: break via killing threads" if @verbose
+
             @threads.each(&:kill)
             break
           end
@@ -269,15 +280,20 @@ module TurboTests
         when "exit"
           exited += 1
           if exited == @num_processes
+            warn "* Loop: break via exited count" if @verbose
             break
           end
         else
+          warn "! Unhandled msg: #{message}" if @verbose
           STDERR.puts("Unhandled message in main process: #{message}")
         end
 
         STDOUT.flush
       end
-    rescue Interrupt
+
+      warn "* Loop is broken" if @verbose
+    rescue Interrupt => error
+      warn "! Interrupt | #{error.class} | #{error.message} | #{error.backtrace}" if @verbose
     end
 
     def fail_fast_met
