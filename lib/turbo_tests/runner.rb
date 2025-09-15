@@ -236,14 +236,14 @@ module TurboTests
       Thread.new do
         loop do
           msg = src.readpartial(4096)
-          warn "$ #{ts} | SCT [#{process_id}] | read | #{msg.inspect}" if @verbose
+          warn "$ #{ts} | PID: #{process_id} | SCT read | #{msg.inspect}" if @verbose
           msg
         rescue EOFError
-          warn "$ #{ts} SCT [#{process_id}] | EOFError" if @verbose
+          warn "$ #{ts} | PID: #{process_id} | SCT EOFError" if @verbose
           src.close
           break
         else
-          warn "$ #{ts} | SCT [#{process_id}] | else | #{msg.inspect}" if @verbose
+          warn "$ #{ts} | PID: #{process_id} | SCT else | #{msg.inspect}" if @verbose
           dst.write(msg)
         end
       end
