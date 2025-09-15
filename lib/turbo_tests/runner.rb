@@ -225,6 +225,11 @@ module TurboTests
 
       loop do
         message = @messages.pop
+
+        if @verbose
+          warn "> #{Time.now} | #{message}"
+        end
+
         case message[:type]
         when "example_passed"
           example = FakeExample.from_obj(message[:example])
