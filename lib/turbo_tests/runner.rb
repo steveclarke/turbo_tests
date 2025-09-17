@@ -218,7 +218,11 @@ module TurboTests
         if @sync_log
           @threads <<
             Thread.new do
+              warn "* #{ts} | PID: #{process_id} | before capture3" if @verbose
+
               stdout_s, stderr_s, wait_thr = Open3.capture3(env, *command)
+
+              warn "* #{ts} | PID: #{process_id} | after capture3" if @verbose
 
               stdout_s.each_line do |line|
                 result = line.split(env["RSPEC_FORMATTER_OUTPUT_ID"])
@@ -258,8 +262,15 @@ module TurboTests
               @wait_thr_statuses << wait_thr.exitstatus
             end
         else
+          warn "* #{ts} | PID: #{process_id} | before popen3" if @verbose
+
           stdin, stdout, stderr, wait_thr = Open3.popen3(env, *command)
+
+          warn "* #{ts} | PID: #{process_id} | after popen3" if @verbose
+
           stdin.close
+
+          warn "* #{ts} | PID: #{process_id} | after stdin.close" if @verbose
 
           @threads <<
             Thread.new do
