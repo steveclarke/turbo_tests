@@ -21,9 +21,11 @@ module TurboTests
       count = opts.fetch(:count, nil)
       seed = opts.fetch(:seed)
       seed_used = !seed.nil?
+      sync_log = !!opts.fetch(:sync_log)
 
       if verbose
         warn "VERBOSE"
+        warn "SYNC_LOG" if sync_log
       end
 
       reporter = Reporter.from_config(formatters, start_time, seed, seed_used)
@@ -38,6 +40,7 @@ module TurboTests
         count: count,
         seed: seed,
         seed_used: seed_used,
+        sync_log: sync_log,
       ).run
     end
 
@@ -51,6 +54,7 @@ module TurboTests
       @count = opts[:count]
       @seed = opts[:seed]
       @seed_used = opts[:seed_used]
+      @sync_log = opts[:sync_log]
 
       @load_time = 0
       @load_count = 0
@@ -91,28 +95,55 @@ module TurboTests
       @reporter.report(tests_in_groups) do |reporter|
         warn "* #{ts} | Before spawning subprocesses" if @verbose
 
-        wait_threads = tests_in_groups.map.with_index do |tests, process_id|
-          start_regular_subprocess(tests, process_id + 1, **subprocess_opts)
-        end
+        if @sync_log
+          @wait_thr_statuses = []
 
-        warn "* #{ts} | Before 'handle_messages'" if @verbose
+          tests_in_groups.each_with_index do |tests, process_id|
+            start_regular_subprocess(tests, process_id + 1, **subprocess_opts)
+          end
 
-        handle_messages
+          warn "* #{ts} | Before 'handle_messages'" if @verbose
 
-        warn "* #{ts} | After 'handle_messages'" if @verbose
+          handle_messages
 
-        @threads.each(&:join)
+          warn "* #{ts} | After 'handle_messages'" if @verbose
 
-        warn "* #{ts} | After threads join" if @verbose
+          @threads.each(&:join)
 
-        if @reporter.failed_examples.empty? && wait_threads.map(&:value).all?(&:success?)
-          warn "* #{ts} | Fast 0 return" if @verbose
-          0
+          warn "* #{ts} | After threads join" if @verbose
+
+          if @reporter.failed_examples.empty? && @wait_thr_statuses.all? { |s| s == 0 }
+            warn "* #{ts} | Fast 0 return" if @verbose
+            0
+          else
+            warn "* #{ts} | Wait threads max" if @verbose
+
+            @wait_thr_statuses.max
+          end
         else
-          warn "* #{ts} | Wait threads max" if @verbose
+          wait_threads = tests_in_groups.map.with_index do |tests, process_id|
+            start_regular_subprocess(tests, process_id + 1, **subprocess_opts)
+          end
 
-          # From https://github.com/serpapi/turbo_tests/pull/20/
-          wait_threads.map { |thread| thread.value.exitstatus }.max
+          warn "* #{ts} | Before 'handle_messages'" if @verbose
+
+          handle_messages
+
+          warn "* #{ts} | After 'handle_messages'" if @verbose
+
+          @threads.each(&:join)
+
+          warn "* #{ts} | After threads join" if @verbose
+
+          if @reporter.failed_examples.empty? && wait_threads.map(&:value).all?(&:success?)
+            warn "* #{ts} | Fast 0 return" if @verbose
+            0
+          else
+            warn "* #{ts} | Wait threads max" if @verbose
+
+            # From https://github.com/serpapi/turbo_tests/pull/20/
+            wait_threads.map { |thread| thread.value.exitstatus }.max
+          end
         end
       end
     end
@@ -184,55 +215,99 @@ module TurboTests
           warn "+ #{ts} | Process #{process_id}: #{command_str}"
         end
 
-        stdin, stdout, stderr, wait_thr = Open3.popen3(env, *command)
-        stdin.close
+        if @sync_log
+          @threads <<
+            Thread.new do
+              stdout_s, stderr_s, wait_thr = Open3.capture3(env, *command)
 
-        @threads <<
-          Thread.new do
-            stdout.each_line do |line|
-              result = line.split(env["RSPEC_FORMATTER_OUTPUT_ID"])
+              stdout_s.each_line do |line|
+                result = line.split(env["RSPEC_FORMATTER_OUTPUT_ID"])
 
-              output = result.shift
+                output = result.shift
 
-              unless output.empty?
-                warn "* #{ts} | PID: #{process_id} | line: #{line.inspect} | result: #{result.inspect} | extra output: #{output.inspect}" if @verbose
-                print(output)
+                unless output.empty?
+                  warn "* #{ts} | PID: #{process_id} | line: #{line.inspect} | result: #{result.inspect} | extra output: #{output.inspect}" if @verbose
+                  print(output)
+                end
+
+                message = result.shift
+                # next unless message
+
+                if message
+                  warn "* #{ts} | PID: #{process_id} | line: #{line.inspect} | result: #{result.inspect} | output: #{output.inspect} | message: #{message.inspect}" if @verbose
+                else
+                  warn "* #{ts} | PID: #{process_id} | skipping line: #{line.inspect} | result: #{result.inspect} | output: #{output.inspect} | message: #{message.inspect}" if @verbose
+                  next
+                end
+
+                message = JSON.parse(message, symbolize_names: true)
+                message[:process_id] = process_id
+                @messages << message
               end
 
-              message = result.shift
-              # next unless message
+              @messages << { type: "exit", process_id: process_id }
 
-              if message
-                warn "* #{ts} | PID: #{process_id} | line: #{line.inspect} | result: #{result.inspect} | output: #{output.inspect} | message: #{message.inspect}" if @verbose
-              else
-                warn "* #{ts} | PID: #{process_id} | skipping line: #{line.inspect} | result: #{result.inspect} | output: #{output.inspect} | message: #{message.inspect}" if @verbose
-                next
+              unless stderr_s.empty?
+                STDERR.write(stderr_s)
               end
 
-              message = JSON.parse(message, symbolize_names: true)
-              message[:process_id] = process_id
-              @messages << message
+              unless wait_thr.success?
+                @messages << { type: "error" }
+              end
+
+              @wait_thr_statuses << wait_thr.exitstatus
+            end
+        else
+          stdin, stdout, stderr, wait_thr = Open3.popen3(env, *command)
+          stdin.close
+
+          @threads <<
+            Thread.new do
+              stdout.each_line do |line|
+                result = line.split(env["RSPEC_FORMATTER_OUTPUT_ID"])
+
+                output = result.shift
+
+                unless output.empty?
+                  warn "* #{ts} | PID: #{process_id} | line: #{line.inspect} | result: #{result.inspect} | extra output: #{output.inspect}" if @verbose
+                  print(output)
+                end
+
+                message = result.shift
+                # next unless message
+
+                if message
+                  warn "* #{ts} | PID: #{process_id} | line: #{line.inspect} | result: #{result.inspect} | output: #{output.inspect} | message: #{message.inspect}" if @verbose
+                else
+                  warn "* #{ts} | PID: #{process_id} | skipping line: #{line.inspect} | result: #{result.inspect} | output: #{output.inspect} | message: #{message.inspect}" if @verbose
+                  next
+                end
+
+                message = JSON.parse(message, symbolize_names: true)
+                message[:process_id] = process_id
+                @messages << message
+              end
+
+              warn "* #{ts} | PID: #{process_id} | marking process to exit" if @verbose
+              @messages << { type: "exit", process_id: process_id }
+            rescue => thread_error
+              warn "! #{ts} | Thread error | PID: #{process_id} | #{thread_error.class} | #{thread_error.message} | #{thread_error.backtrace} | #{env["RSPEC_FORMATTER_OUTPUT_ID"]}" if @verbose
+              raise thread_error
             end
 
-            warn "* #{ts} | PID: #{process_id} | marking process to exit" if @verbose
-            @messages << { type: "exit", process_id: process_id }
-          rescue => thread_error
-            warn "! #{ts} | Thread error | PID: #{process_id} | #{thread_error.class} | #{thread_error.message} | #{thread_error.backtrace} | #{env["RSPEC_FORMATTER_OUTPUT_ID"]}" if @verbose
-            raise thread_error
+          warn "* #{ts} | PID: #{process_id} | start copy thread" if @verbose
+          @threads << start_copy_thread(stderr, STDERR, process_id)
+
+          warn "* #{ts} | PID: #{process_id} | << error" if @verbose
+          @threads << Thread.new do
+            unless wait_thr.value.success?
+              @messages << { type: "error" }
+            end
           end
 
-        warn "* #{ts} | PID: #{process_id} | start copy thread" if @verbose
-        @threads << start_copy_thread(stderr, STDERR, process_id)
-
-        warn "* #{ts} | PID: #{process_id} | << error" if @verbose
-        @threads << Thread.new do
-          unless wait_thr.value.success?
-            @messages << { type: "error" }
-          end
+          warn "* #{ts} | PID: #{process_id} | return wait_thr" if @verbose
+          wait_thr
         end
-
-        warn "* #{ts} | PID: #{process_id} | return wait_thr" if @verbose
-        wait_thr
       end
     end
 

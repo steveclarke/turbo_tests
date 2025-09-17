@@ -17,6 +17,7 @@ module TurboTests
       verbose = false
       fail_fast = nil
       seed = nil
+      sync_log = false
 
       OptionParser.new { |opts|
         opts.banner = <<~BANNER
@@ -81,6 +82,10 @@ module TurboTests
         opts.on("--seed SEED", "Seed for rspec") do |s|
           seed = s
         end
+
+        opts.on("--sync-log", "Use sync log") do
+          sync_log = true
+        end
       }.parse!(@argv)
 
       requires.each { |f| require(f) }
@@ -106,7 +111,8 @@ module TurboTests
         verbose: verbose,
         fail_fast: fail_fast,
         count: count,
-        seed: seed
+        seed: seed,
+        sync_log: sync_log,
       )
 
       # From https://github.com/serpapi/turbo_tests/pull/20/
