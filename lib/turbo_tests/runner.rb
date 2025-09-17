@@ -243,7 +243,7 @@ module TurboTests
                   begin
                     warn "* #{ts} | PID: #{process_id} | o_read before" if @verbose
                     o_read = o.read_nonblock(4096)
-                    warn "* #{ts} | PID: #{process_id} | o_read after: #{o_read}" if @verbose
+                    warn "* #{ts} | PID: #{process_id} | o_read after: #{o_read.inspect}" if @verbose
 
                     stdout << o_read
                   rescue EOFError
@@ -260,7 +260,7 @@ module TurboTests
                   begin
                     warn "* #{ts} | PID: #{process_id} | e_read before" if @verbose
                     e_read = e.read_nonblock(4096)
-                    warn "* #{ts} | PID: #{process_id} | e_read after: #{e_read}" if @verbose
+                    warn "* #{ts} | PID: #{process_id} | e_read after: #{e_read.inspect}" if @verbose
 
                     stderr << e_read
                   rescue EOFError
@@ -271,9 +271,9 @@ module TurboTests
                     warn "* #{ts} | PID: #{process_id} | e other error: #{error.class}, #{error.message}" if @verbose
                     raise error
                   end
-
-                  warn "* #{ts} | PID: #{process_id} | outside include checks, readables: #{readables}, readable: #{readable}" if @verbose
                 end
+
+                warn "* #{ts} | PID: #{process_id} | outside include checks, readables: #{readables}, readable: #{readable}" if @verbose
               end
 
               warn "* #{ts} | PID: #{process_id} | after read_nonblock" if @verbose
