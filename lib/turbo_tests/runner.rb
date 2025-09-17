@@ -216,13 +216,32 @@ module TurboTests
         end
 
         if @sync_log
-          @threads <<
-            Thread.new do
-              warn "* #{ts} | PID: #{process_id} | before capture3" if @verbose
+          warn "* #{ts} | PID: #{process_id} | before popen3+select" if @verbose
 
-              stdout_s, stderr_s, wait_thr = Open3.capture3(env, *command)
+          @threads << Thread.new do
+            Open3.popen3(env, *command) do |i, o, e, wait_thr|
+              i.close
+              readables = [o, e]
+              stdout = []
+              stderr = []
 
-              warn "* #{ts} | PID: #{process_id} | after capture3" if @verbose
+              warn "* #{ts} | PID: #{process_id} | before read_nonblock" if @verbose
+
+              until readables.empty?
+                readable, = IO.select(readables)
+
+                stdout << o.read_nonblock(4096, exception: false) if readable.include?(o)
+                stderr << e.read_nonblock(4096, exception: false) if readable.include?(e)
+
+                readables.reject!(&:eof?)
+              end
+
+              warn "* #{ts} | PID: #{process_id} | after read_nonblock" if @verbose
+
+              stdout_s = stdout.join
+              stderr_s = stderr.join
+
+              warn "* #{ts} | PID: #{process_id} | before each_line parsing" if @verbose
 
               stdout_s.each_line do |line|
                 result = line.split(env["RSPEC_FORMATTER_OUTPUT_ID"])
@@ -249,18 +268,73 @@ module TurboTests
                 @messages << message
               end
 
-              @messages << { type: "exit", process_id: process_id }
+              warn "* #{ts} | PID: #{process_id} | before stderr write" if @verbose
 
               unless stderr_s.empty?
                 STDERR.write(stderr_s)
               end
 
-              unless wait_thr.success?
+              unless wait_thr.value.success?
                 @messages << { type: "error" }
               end
 
-              @wait_thr_statuses << wait_thr.exitstatus
+              warn "* #{ts} | PID: #{process_id} | before exit message" if @verbose
+
+              @messages << { type: "exit", process_id: process_id }
+
+              @wait_thr_statuses << wait_thr.value.exitstatus
+
+              # [stdout.join, stderr.join, t]
             end
+          end
+
+          warn "* #{ts} | PID: #{process_id} | after popen3+select" if @verbose
+
+          # @threads <<
+          #   Thread.new do
+          #     warn "* #{ts} | PID: #{process_id} | before capture3" if @verbose
+
+          #     stdout_s, stderr_s, wait_thr = Open3.capture3(env, *command)
+
+          #     warn "* #{ts} | PID: #{process_id} | after capture3" if @verbose
+
+          #     stdout_s.each_line do |line|
+          #       result = line.split(env["RSPEC_FORMATTER_OUTPUT_ID"])
+
+          #       output = result.shift
+
+          #       unless output.empty?
+          #         warn "* #{ts} | PID: #{process_id} | line: #{line.inspect} | result: #{result.inspect} | extra output: #{output.inspect}" if @verbose
+          #         print(output)
+          #       end
+
+          #       message = result.shift
+          #       # next unless message
+
+          #       if message
+          #         warn "* #{ts} | PID: #{process_id} | line: #{line.inspect} | result: #{result.inspect} | output: #{output.inspect} | message: #{message.inspect}" if @verbose
+          #       else
+          #         warn "* #{ts} | PID: #{process_id} | skipping line: #{line.inspect} | result: #{result.inspect} | output: #{output.inspect} | message: #{message.inspect}" if @verbose
+          #         next
+          #       end
+
+          #       message = JSON.parse(message, symbolize_names: true)
+          #       message[:process_id] = process_id
+          #       @messages << message
+          #     end
+
+          #     @messages << { type: "exit", process_id: process_id }
+
+          #     unless stderr_s.empty?
+          #       STDERR.write(stderr_s)
+          #     end
+
+          #     unless wait_thr.success?
+          #       @messages << { type: "error" }
+          #     end
+
+          #     @wait_thr_statuses << wait_thr.exitstatus
+          #   end
         else
           warn "* #{ts} | PID: #{process_id} | before popen3" if @verbose
 
