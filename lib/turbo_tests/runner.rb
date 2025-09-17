@@ -230,10 +230,25 @@ module TurboTests
               until readables.empty?
                 readable, = IO.select(readables)
 
-                stdout << o.read_nonblock(4096, exception: false) if readable.include?(o)
-                stderr << e.read_nonblock(4096, exception: false) if readable.include?(e)
+                # stdout << o.read_nonblock(4096, exception: false) if readable.include?(o)
+                # stderr << e.read_nonblock(4096, exception: false) if readable.include?(e)
 
-                readables.reject!(&:eof?)
+                # readables.reject!(&:eof?)
+
+                if readable.include?(o)
+                  begin
+                    stdout << o.read_nonblock(4096)
+                  rescue EOFError
+                    readables.delete(o)
+                  end
+                end
+                if readable.include?(e)
+                  begin
+                    stderr << e.read_nonblock(4096)
+                  rescue EOFError
+                    readables.delete(e)
+                  end
+                end
               end
 
               warn "* #{ts} | PID: #{process_id} | after read_nonblock" if @verbose
