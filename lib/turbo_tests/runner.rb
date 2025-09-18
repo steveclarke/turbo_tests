@@ -221,62 +221,111 @@ module TurboTests
           @threads << Thread.new do
             Open3.popen3(env, *command) do |i, o, e, wait_thr|
               i.close
-              readables = [o, e]
               stdout = []
               stderr = []
 
-              warn "* #{ts} | PID: #{process_id} | before read_nonblock" if @verbose
+              warn "* #{ts} | PID: #{process_id} | before read blocks" if @verbose
 
-              until readables.empty?
-                warn "* #{ts} | PID: #{process_id} | readables: #{readables}" if @verbose
+              loop do
+                begin
+                  warn "* #{ts} | PID: #{process_id} | before o_read" if @verbose
+                  o_read = o.read_nonblock(4096)
+                  warn "* #{ts} | PID: #{process_id} | after o_read: #{o_read.inspect}" if @verbose
 
-                readable, = IO.select(readables)
-
-                warn "* #{ts} | PID: #{process_id} | readable: #{readable}" if @verbose
-
-                # stdout << o.read_nonblock(4096, exception: false) if readable.include?(o)
-                # stderr << e.read_nonblock(4096, exception: false) if readable.include?(e)
-
-                # readables.reject!(&:eof?)
-
-                if readable.include?(o)
-                  begin
-                    warn "* #{ts} | PID: #{process_id} | o_read before" if @verbose
-                    o_read = o.read_nonblock(4096)
-                    warn "* #{ts} | PID: #{process_id} | o_read after: #{o_read.inspect}" if @verbose
-
-                    stdout << o_read
-                  rescue EOFError
-                    warn "* #{ts} | PID: #{process_id} | o_delete, readables before: #{readables}" if @verbose
-                    readables.delete(o)
-                    warn "* #{ts} | PID: #{process_id} | o_delete, readables after: #{readables}" if @verbose
-                  rescue => error
-                    warn "* #{ts} | PID: #{process_id} | o other error: #{error.class}, #{error.message}" if @verbose
-                    raise error
-                  end
+                  stdout << o_read
+                rescue IO::WaitReadable
+                  warn "* #{ts} | PID: #{process_id} | o WaitReadable before select" if @verbose
+                  IO.select([o])
+                  warn "* #{ts} | PID: #{process_id} | o WaitReadable after select" if @verbose
+                  retry
+                rescue IO::WaitWritable
+                  warn "* #{ts} | PID: #{process_id} | o WaitWritable before select" if @verbose
+                  IO.select(nil, [o])
+                  warn "* #{ts} | PID: #{process_id} | o WaitWritable after select" if @verbose
+                  retry
+                rescue EOFError
+                  warn "* #{ts} | PID: #{process_id} | o eof" if @verbose
+                  break
                 end
-
-                if readable.include?(e)
-                  begin
-                    warn "* #{ts} | PID: #{process_id} | e_read before" if @verbose
-                    e_read = e.read_nonblock(4096)
-                    warn "* #{ts} | PID: #{process_id} | e_read after: #{e_read.inspect}" if @verbose
-
-                    stderr << e_read
-                  rescue EOFError
-                    warn "* #{ts} | PID: #{process_id} | e_delete, readables before: #{readables}" if @verbose
-                    readables.delete(e)
-                    warn "* #{ts} | PID: #{process_id} | e_delete, readables after: #{readables}" if @verbose
-                  rescue => error
-                    warn "* #{ts} | PID: #{process_id} | e other error: #{error.class}, #{error.message}" if @verbose
-                    raise error
-                  end
-                end
-
-                warn "* #{ts} | PID: #{process_id} | outside include checks, readables: #{readables}, readable: #{readable}" if @verbose
               end
 
-              warn "* #{ts} | PID: #{process_id} | after read_nonblock" if @verbose
+              loop do
+                begin
+                  warn "* #{ts} | PID: #{process_id} | before e_read" if @verbose
+                  e_read = e.read_nonblock(4096)
+                  warn "* #{ts} | PID: #{process_id} | after e_read: #{e_read.inspect}" if @verbose
+
+                  stdout << e_read
+                rescue IO::WaitReadable
+                  warn "* #{ts} | PID: #{process_id} | e WaitReadable before select" if @verbose
+                  IO.select([e])
+                  warn "* #{ts} | PID: #{process_id} | e WaitReadable after select" if @verbose
+                  retry
+                rescue IO::WaitWritable
+                  warn "* #{ts} | PID: #{process_id} | e WaitWritable before select" if @verbose
+                  IO.select(nil, [e])
+                  warn "* #{ts} | PID: #{process_id} | e WaitWritable after select" if @verbose
+                  retry
+                rescue EOFError
+                  warn "* #{ts} | PID: #{process_id} | e eof" if @verbose
+                  break
+                end
+              end
+
+              warn "* #{ts} | PID: #{process_id} | after read blocks" if @verbose
+
+              # i.close
+              # readables = [o, e]
+              # stdout = []
+              # stderr = []
+
+              # warn "* #{ts} | PID: #{process_id} | before read_nonblock" if @verbose
+
+              # until readables.empty?
+              #   warn "* #{ts} | PID: #{process_id} | readables: #{readables}" if @verbose
+
+              #   readable, = IO.select(readables)
+
+              #   warn "* #{ts} | PID: #{process_id} | readable: #{readable}" if @verbose
+
+              #   if readable.include?(o)
+              #     begin
+              #       warn "* #{ts} | PID: #{process_id} | o_read before" if @verbose
+              #       o_read = o.read_nonblock(4096)
+              #       warn "* #{ts} | PID: #{process_id} | o_read after: #{o_read.inspect}" if @verbose
+
+              #       stdout << o_read
+              #     rescue EOFError
+              #       warn "* #{ts} | PID: #{process_id} | o_delete, readables before: #{readables}" if @verbose
+              #       readables.delete(o)
+              #       warn "* #{ts} | PID: #{process_id} | o_delete, readables after: #{readables}" if @verbose
+              #     rescue => error
+              #       warn "* #{ts} | PID: #{process_id} | o other error: #{error.class}, #{error.message}" if @verbose
+              #       raise error
+              #     end
+              #   end
+
+              #   if readable.include?(e)
+              #     begin
+              #       warn "* #{ts} | PID: #{process_id} | e_read before" if @verbose
+              #       e_read = e.read_nonblock(4096)
+              #       warn "* #{ts} | PID: #{process_id} | e_read after: #{e_read.inspect}" if @verbose
+
+              #       stderr << e_read
+              #     rescue EOFError
+              #       warn "* #{ts} | PID: #{process_id} | e_delete, readables before: #{readables}" if @verbose
+              #       readables.delete(e)
+              #       warn "* #{ts} | PID: #{process_id} | e_delete, readables after: #{readables}" if @verbose
+              #     rescue => error
+              #       warn "* #{ts} | PID: #{process_id} | e other error: #{error.class}, #{error.message}" if @verbose
+              #       raise error
+              #     end
+              #   end
+
+              #   warn "* #{ts} | PID: #{process_id} | outside include checks, readables: #{readables}, readable: #{readable}" if @verbose
+              # end
+
+              # warn "* #{ts} | PID: #{process_id} | after read_nonblock" if @verbose
 
               stdout_s = stdout.join
               stderr_s = stderr.join
@@ -323,8 +372,6 @@ module TurboTests
               @messages << { type: "exit", process_id: process_id }
 
               @wait_thr_statuses << wait_thr.value.exitstatus
-
-              # [stdout.join, stderr.join, t]
             end
           end
 
