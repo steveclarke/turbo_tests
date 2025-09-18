@@ -286,7 +286,7 @@ module TurboTests
 
                 warn "* #{ts} | PID: #{process_id} | readables: #{readables}" if @verbose
 
-                readable, = IO.select(readables, nil, nil, 10)
+                readable, = IO.select(readables)
 
                 if readable.nil?
                   warn "* #{ts} | PID: #{process_id} | no ready streams" if @verbose
@@ -566,6 +566,7 @@ module TurboTests
           STDERR.puts("Unhandled message in main process: #{message}")
         end
 
+        warn "* #{ts} | STDOUT flush" if @verbose
         STDOUT.flush
       end
 
