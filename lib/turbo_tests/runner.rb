@@ -286,7 +286,7 @@ module TurboTests
 
                 warn "* #{ts} | PID: #{process_id} | readables: #{readables}" if @verbose
 
-                readable, = IO.select(readables)
+                readable, = IO.select(readables, nil, nil, 30)
 
                 if readable.nil?
                   warn "* #{ts} | PID: #{process_id} | no ready streams" if @verbose
