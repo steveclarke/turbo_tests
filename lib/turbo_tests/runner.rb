@@ -236,12 +236,13 @@ module TurboTests
                 rescue IO::WaitReadable
                   warn "* #{ts} | PID: #{process_id} | o WaitReadable before select" if @verbose
                   selected = IO.select([o], nil, nil, 10)
+
+                  if selected.nil?
+                    warn "* #{ts} | PID: #{process_id} | o WaitReadable no ready streams" if @verbose
+                    break
+                  end
+
                   warn "* #{ts} | PID: #{process_id} | o WaitReadable after select: #{selected.inspect}" if @verbose
-                  retry
-                rescue IO::WaitWritable
-                  warn "* #{ts} | PID: #{process_id} | o WaitWritable before select" if @verbose
-                  selected = IO.select(nil, [o], nil, 10)
-                  warn "* #{ts} | PID: #{process_id} | o WaitWritable after select: #{selected.inspect}" if @verbose
                   retry
                 rescue EOFError
                   warn "* #{ts} | PID: #{process_id} | o eof" if @verbose
@@ -259,12 +260,13 @@ module TurboTests
                 rescue IO::WaitReadable
                   warn "* #{ts} | PID: #{process_id} | e WaitReadable before select" if @verbose
                   selected = IO.select([e], nil, nil, 10)
+
+                  if selected.nil?
+                    warn "* #{ts} | PID: #{process_id} | e WaitReadable no ready streams" if @verbose
+                    break
+                  end
+
                   warn "* #{ts} | PID: #{process_id} | e WaitReadable after select: #{selected.inspect}" if @verbose
-                  retry
-                rescue IO::WaitWritable
-                  warn "* #{ts} | PID: #{process_id} | e WaitWritable before select" if @verbose
-                  selected = IO.select(nil, [e], nil, 10)
-                  warn "* #{ts} | PID: #{process_id} | e WaitWritable after select: #{selected.inspect}" if @verbose
                   retry
                 rescue EOFError
                   warn "* #{ts} | PID: #{process_id} | e eof" if @verbose
