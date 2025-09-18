@@ -256,7 +256,7 @@ module TurboTests
                   e_read = e.read_nonblock(4096)
                   warn "* #{ts} | PID: #{process_id} | after e_read: #{e_read.inspect}" if @verbose
 
-                  stdout << e_read
+                  stderr << e_read
                 rescue IO::WaitReadable
                   warn "* #{ts} | PID: #{process_id} | e WaitReadable before select" if @verbose
                   selected = IO.select([e], nil, nil, 10)
@@ -359,11 +359,13 @@ module TurboTests
                 @messages << message
               end
 
-              warn "* #{ts} | PID: #{process_id} | before stderr write" if @verbose
+              warn "* #{ts} | PID: #{process_id} | before stderr write, size: #{stderr_s.size}" if @verbose
 
               unless stderr_s.empty?
-                STDERR.write(stderr_s)
+                STDERR.puts(stderr_s)
               end
+
+              warn "* #{ts} | PID: #{process_id} | before checking wait_thr status: #{wait_thr.value.exitstatus}" if @verbose
 
               unless wait_thr.value.success?
                 @messages << { type: "error" }
