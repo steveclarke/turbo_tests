@@ -235,13 +235,13 @@ module TurboTests
                   stdout << o_read
                 rescue IO::WaitReadable
                   warn "* #{ts} | PID: #{process_id} | o WaitReadable before select" if @verbose
-                  IO.select([o])
-                  warn "* #{ts} | PID: #{process_id} | o WaitReadable after select" if @verbose
+                  selected = IO.select([o], nil, nil, 10)
+                  warn "* #{ts} | PID: #{process_id} | o WaitReadable after select: #{selected.inspect}" if @verbose
                   retry
                 rescue IO::WaitWritable
                   warn "* #{ts} | PID: #{process_id} | o WaitWritable before select" if @verbose
-                  IO.select(nil, [o])
-                  warn "* #{ts} | PID: #{process_id} | o WaitWritable after select" if @verbose
+                  selected = IO.select(nil, [o], nil, 10)
+                  warn "* #{ts} | PID: #{process_id} | o WaitWritable after select: #{selected.inspect}" if @verbose
                   retry
                 rescue EOFError
                   warn "* #{ts} | PID: #{process_id} | o eof" if @verbose
@@ -258,13 +258,13 @@ module TurboTests
                   stdout << e_read
                 rescue IO::WaitReadable
                   warn "* #{ts} | PID: #{process_id} | e WaitReadable before select" if @verbose
-                  IO.select([e])
-                  warn "* #{ts} | PID: #{process_id} | e WaitReadable after select" if @verbose
+                  selected = IO.select([e], nil, nil, 10)
+                  warn "* #{ts} | PID: #{process_id} | e WaitReadable after select: #{selected.inspect}" if @verbose
                   retry
                 rescue IO::WaitWritable
                   warn "* #{ts} | PID: #{process_id} | e WaitWritable before select" if @verbose
-                  IO.select(nil, [e])
-                  warn "* #{ts} | PID: #{process_id} | e WaitWritable after select" if @verbose
+                  selected = IO.select(nil, [e], nil, 10)
+                  warn "* #{ts} | PID: #{process_id} | e WaitWritable after select: #{selected.inspect}" if @verbose
                   retry
                 rescue EOFError
                   warn "* #{ts} | PID: #{process_id} | e eof" if @verbose
