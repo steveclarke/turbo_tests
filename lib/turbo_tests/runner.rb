@@ -229,6 +229,20 @@ module TurboTests
       end
     end
 
+    def increase_pipe_buffer_size(stdout, stderr, process_id)
+      if RUBY_PLATFORM.include?("linux")
+        warn "* #{ts} | PID: #{process_id} | linux detected" if @verbose
+
+        warn "* #{ts} | PID: #{process_id} | o pipe buffer size: #{stdout.fcntl(1032)}" if @verbose
+        stdout.fcntl(1031, 1048576) # 1MB
+        warn "* #{ts} | PID: #{process_id} | o pipe buffer size: #{stdout.fcntl(1032)}" if @verbose
+
+        warn "* #{ts} | PID: #{process_id} | e pipe buffer size: #{stderr.fcntl(1032)}" if @verbose
+        stderr.fcntl(1031, 1048576) # 1MB
+        warn "* #{ts} | PID: #{process_id} | e pipe buffer size: #{stderr.fcntl(1032)}" if @verbose
+      end
+    end
+
     def popen3(env, command, process_id)
       warn "* #{ts} | PID: #{process_id} | before popen3" if @verbose
 
@@ -239,6 +253,8 @@ module TurboTests
       stdin.close
 
       warn "* #{ts} | PID: #{process_id} | after stdin.close" if @verbose
+
+      increase_pipe_buffer_size(stdout, stderr, process_id)
 
       @threads <<
         Thread.new do
@@ -299,17 +315,7 @@ module TurboTests
 
           warn "* #{ts} | PID: #{process_id} | after stdin.close" if @verbose
 
-          if RUBY_PLATFORM.include?("linux")
-            warn "* #{ts} | PID: #{process_id} | linux detected" if @verbose
-
-            warn "* #{ts} | PID: #{process_id} | o pipe buffer size: #{stdout.fcntl(1032)}" if @verbose
-            stdout.fcntl(1031, 1048576) # 1MB
-            warn "* #{ts} | PID: #{process_id} | o pipe buffer size: #{stdout.fcntl(1032)}" if @verbose
-
-            warn "* #{ts} | PID: #{process_id} | e pipe buffer size: #{stderr.fcntl(1032)}" if @verbose
-            stderr.fcntl(1031, 1048576) # 1MB
-            warn "* #{ts} | PID: #{process_id} | e pipe buffer size: #{stderr.fcntl(1032)}" if @verbose
-          end
+          increase_pipe_buffer_size(stdout, stderr, process_id)
 
           @threads << Thread.new do
             stdout.each_line do |line|
