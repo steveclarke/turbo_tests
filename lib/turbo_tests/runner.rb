@@ -218,7 +218,8 @@ module TurboTests
         if @sync_log
           # popen3_select(env, command, process_id)
           # popen3_select_reverse(env, command, process_id)
-          capture3(env, command, process_id)
+          # capture3(env, command, process_id)
+          capture2e(env, command, process_id)
         else
           popen3(env, command, process_id)
         end
@@ -558,6 +559,62 @@ module TurboTests
         end
 
         warn "* #{ts} | PID: #{process_id} | after stderr write, size: #{stderr_s.size}" if @verbose
+
+        unless wait_thr.success?
+          @messages << { type: "error" }
+        end
+
+        warn "* #{ts} | PID: #{process_id} | marking process to exit" if @verbose
+        @messages << { type: "exit", process_id: process_id }
+
+        warn "* #{ts} | PID: #{process_id} | pushing exitstatus" if @verbose
+
+        @wait_thr_statuses << wait_thr.exitstatus
+      end
+    end
+
+    def capture2e(env, command, process_id)
+      @threads << Thread.new do
+        warn "* #{ts} | PID: #{process_id} | before capture2e" if @verbose
+
+        log, wait_thr = Open3.capture2e(env, *command)
+
+        warn "* #{ts} | PID: #{process_id} | after capture2e" if @verbose
+
+        log.each_line do |line|
+          if line.start_with?(env["RSPEC_FORMATTER_OUTPUT_ID"])
+            result = line.split(env["RSPEC_FORMATTER_OUTPUT_ID"])
+
+            output = result.shift
+
+            unless output.empty?
+              warn "* #{ts} | PID: #{process_id} | line: #{line.inspect} | result: #{result.inspect} | extra output: #{output.inspect}" if @verbose
+              print(output)
+            end
+
+            message = result.shift
+            # next unless message
+
+            if message
+              warn "* #{ts} | PID: #{process_id} | line: #{line.inspect} | result: #{result.inspect} | output: #{output.inspect} | message: #{message.inspect}" if @verbose
+            else
+              warn "* #{ts} | PID: #{process_id} | skipping line: #{line.inspect} | result: #{result.inspect} | output: #{output.inspect} | message: #{message.inspect}" if @verbose
+              next
+            end
+
+            message = JSON.parse(message, symbolize_names: true)
+            message[:process_id] = process_id
+            @messages << message
+          else
+            warn "* #{ts} | PID: #{process_id} | before stderr write, size: #{stderr_s.size}" if @verbose
+
+            unless stderr_s.empty?
+              STDERR.write(stderr_s)
+            end
+
+            warn "* #{ts} | PID: #{process_id} | after stderr write, size: #{stderr_s.size}" if @verbose
+          end
+        end
 
         unless wait_thr.success?
           @messages << { type: "error" }
