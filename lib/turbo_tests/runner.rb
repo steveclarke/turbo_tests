@@ -706,7 +706,11 @@ module TurboTests
 
         warn "* #{ts} | PID: #{process_id} | after stdin.close" if @verbose
 
-        stdout_and_stderr.each_line do |line|
+        log = read_from_io(stdout_and_stderr, process_id, "oe")
+
+        stdout_and_stderr.close
+
+        log.each_line do |line|
           if line.start_with?(env["RSPEC_FORMATTER_OUTPUT_ID"])
             result = line.split(env["RSPEC_FORMATTER_OUTPUT_ID"])
 
@@ -741,8 +745,6 @@ module TurboTests
           end
         end
 
-        stdout_and_stderr.close
-
         warn "* #{ts} | PID: #{process_id} | marking process to exit" if @verbose
         @messages << { type: "exit", process_id: process_id }
 
@@ -758,6 +760,42 @@ module TurboTests
         warn "! #{ts} | Thread error | PID: #{process_id} | #{thread_error.class} | #{thread_error.message} | #{thread_error.backtrace} | #{env["RSPEC_FORMATTER_OUTPUT_ID"]}" if @verbose
         raise thread_error
       end
+    end
+
+    def read_from_io(io, process_id, prefix)
+      arr = []
+
+      loop do
+        begin
+          warn "* #{ts} | PID: #{process_id} | before #{prefix} read" if @verbose
+          io_read = io.read_nonblock(4096)
+          warn "* #{ts} | PID: #{process_id} | after #{prefix} read: #{io_read.inspect}" if @verbose
+
+          arr << io_read
+        rescue IO::WaitReadable
+          warn "* #{ts} | PID: #{process_id} | #{prefix} WaitReadable before select" if @verbose
+          IO.select([io])
+
+          # selected = IO.select([io], nil, nil, 10)
+
+          # if selected.nil?
+          #   warn "* #{ts} | PID: #{process_id} | #{prefix} WaitReadable no ready streams" if @verbose
+          #   break
+          # end
+
+          # warn "* #{ts} | PID: #{process_id} | #{prefix} WaitReadable after select: #{selected.inspect}" if @verbose
+
+          warn "* #{ts} | PID: #{process_id} | #{prefix} WaitReadable after select" if @verbose
+          retry
+        rescue EOFError
+          warn "* #{ts} | PID: #{process_id} | #{prefix} eof" if @verbose
+          break
+        end
+      end
+
+      warn "* #{ts} | PID: #{process_id} | join after read" if @verbose
+
+      arr.join
     end
 
     def start_copy_thread(src, dst, process_id)
