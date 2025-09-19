@@ -216,279 +216,359 @@ module TurboTests
         end
 
         if @sync_log
-          warn "* #{ts} | PID: #{process_id} | before popen3+select" if @verbose
-
-          @threads << Thread.new do
-            Open3.popen3(env, *command) do |i, o, e, wait_thr|
-              # i.close
-              # stdout = []
-              # stderr = []
-
-              # warn "* #{ts} | PID: #{process_id} | before read blocks" if @verbose
-
-              # loop do
-              #   begin
-              #     warn "* #{ts} | PID: #{process_id} | before o_read" if @verbose
-              #     o_read = o.read_nonblock(4096)
-              #     warn "* #{ts} | PID: #{process_id} | after o_read: #{o_read.inspect}" if @verbose
-
-              #     stdout << o_read
-              #   rescue IO::WaitReadable
-              #     warn "* #{ts} | PID: #{process_id} | o WaitReadable before select" if @verbose
-              #     selected = IO.select([o], nil, nil, 10)
-
-              #     if selected.nil?
-              #       warn "* #{ts} | PID: #{process_id} | o WaitReadable no ready streams" if @verbose
-              #       break
-              #     end
-
-              #     warn "* #{ts} | PID: #{process_id} | o WaitReadable after select: #{selected.inspect}" if @verbose
-              #     retry
-              #   rescue EOFError
-              #     warn "* #{ts} | PID: #{process_id} | o eof" if @verbose
-              #     break
-              #   end
-              # end
-
-              # loop do
-              #   begin
-              #     warn "* #{ts} | PID: #{process_id} | before e_read" if @verbose
-              #     e_read = e.read_nonblock(4096)
-              #     warn "* #{ts} | PID: #{process_id} | after e_read: #{e_read.inspect}" if @verbose
-
-              #     stderr << e_read
-              #   rescue IO::WaitReadable
-              #     warn "* #{ts} | PID: #{process_id} | e WaitReadable before select" if @verbose
-              #     selected = IO.select([e], nil, nil, 10)
-
-              #     if selected.nil?
-              #       warn "* #{ts} | PID: #{process_id} | e WaitReadable no ready streams" if @verbose
-              #       break
-              #     end
-
-              #     warn "* #{ts} | PID: #{process_id} | e WaitReadable after select: #{selected.inspect}" if @verbose
-              #     retry
-              #   rescue EOFError
-              #     warn "* #{ts} | PID: #{process_id} | e eof" if @verbose
-              #     break
-              #   end
-              # end
-
-              i.close
-              readables = [o, e]
-              stdout = []
-              stderr = []
-
-              warn "* #{ts} | PID: #{process_id} | before read_nonblock" if @verbose
-
-              loop do
-                break if readables.empty?
-
-                warn "* #{ts} | PID: #{process_id} | readables: #{readables}" if @verbose
-
-                readable, = IO.select(readables, nil, nil, 30)
-
-                if readable.nil?
-                  warn "* #{ts} | PID: #{process_id} | no ready streams" if @verbose
-                  break
-                end
-
-                warn "* #{ts} | PID: #{process_id} | readable: #{readable.inspect}" if @verbose
-
-                if readable.include?(o)
-                  begin
-                    warn "* #{ts} | PID: #{process_id} | o_read before" if @verbose
-                    o_read = o.read_nonblock(4096)
-                    warn "* #{ts} | PID: #{process_id} | o_read after: #{o_read.inspect}" if @verbose
-
-                    stdout << o_read
-                  rescue EOFError
-                    warn "* #{ts} | PID: #{process_id} | o_delete, readables before: #{readables}" if @verbose
-                    readables.delete(o)
-                    warn "* #{ts} | PID: #{process_id} | o_delete, readables after: #{readables}" if @verbose
-                  rescue => error
-                    warn "* #{ts} | PID: #{process_id} | o other error: #{error.class}, #{error.message}" if @verbose
-                    raise error
-                  end
-                end
-
-                if readable.include?(e)
-                  begin
-                    warn "* #{ts} | PID: #{process_id} | e_read before" if @verbose
-                    e_read = e.read_nonblock(4096)
-                    warn "* #{ts} | PID: #{process_id} | e_read after: #{e_read.inspect}" if @verbose
-
-                    stderr << e_read
-                  rescue EOFError
-                    warn "* #{ts} | PID: #{process_id} | e_delete, readables before: #{readables}" if @verbose
-                    readables.delete(e)
-                    warn "* #{ts} | PID: #{process_id} | e_delete, readables after: #{readables}" if @verbose
-                  rescue => error
-                    warn "* #{ts} | PID: #{process_id} | e other error: #{error.class}, #{error.message}" if @verbose
-                    raise error
-                  end
-                end
-
-                warn "* #{ts} | PID: #{process_id} | outside include checks, readables: #{readables}, readable: #{readable}" if @verbose
-              end
-
-              warn "* #{ts} | PID: #{process_id} | after read blocks" if @verbose
-
-              stdout_s = stdout.join
-              stderr_s = stderr.join
-
-              warn "* #{ts} | PID: #{process_id} | before each_line parsing, size: #{stdout_s.size}" if @verbose
-
-              stdout_s.each_line do |line|
-                result = line.split(env["RSPEC_FORMATTER_OUTPUT_ID"])
-
-                output = result.shift
-
-                unless output.empty?
-                  warn "* #{ts} | PID: #{process_id} | line: #{line.inspect} | result: #{result.inspect} | extra output: #{output.inspect}" if @verbose
-                  print(output)
-                end
-
-                message = result.shift
-                # next unless message
-
-                if message
-                  warn "* #{ts} | PID: #{process_id} | line: #{line.inspect} | result: #{result.inspect} | output: #{output.inspect} | message: #{message.inspect}" if @verbose
-                else
-                  warn "* #{ts} | PID: #{process_id} | skipping line: #{line.inspect} | result: #{result.inspect} | output: #{output.inspect} | message: #{message.inspect}" if @verbose
-                  next
-                end
-
-                message = JSON.parse(message, symbolize_names: true)
-                message[:process_id] = process_id
-                @messages << message
-              end
-
-              warn "* #{ts} | PID: #{process_id} | before stderr write, size: #{stderr_s.size}" if @verbose
-
-              unless stderr_s.empty?
-                STDERR.puts(stderr_s)
-              end
-
-              warn "* #{ts} | PID: #{process_id} | before checking wait_thr status: #{wait_thr.value.exitstatus}" if @verbose
-
-              unless wait_thr.value.success?
-                @messages << { type: "error" }
-              end
-
-              warn "* #{ts} | PID: #{process_id} | before exit message" if @verbose
-
-              @messages << { type: "exit", process_id: process_id }
-
-              @wait_thr_statuses << wait_thr.value.exitstatus
-            end
-          end
-
-          warn "* #{ts} | PID: #{process_id} | after popen3+select" if @verbose
-
-          # @threads <<
-          #   Thread.new do
-          #     warn "* #{ts} | PID: #{process_id} | before capture3" if @verbose
-
-          #     stdout_s, stderr_s, wait_thr = Open3.capture3(env, *command)
-
-          #     warn "* #{ts} | PID: #{process_id} | after capture3" if @verbose
-
-          #     stdout_s.each_line do |line|
-          #       result = line.split(env["RSPEC_FORMATTER_OUTPUT_ID"])
-
-          #       output = result.shift
-
-          #       unless output.empty?
-          #         warn "* #{ts} | PID: #{process_id} | line: #{line.inspect} | result: #{result.inspect} | extra output: #{output.inspect}" if @verbose
-          #         print(output)
-          #       end
-
-          #       message = result.shift
-          #       # next unless message
-
-          #       if message
-          #         warn "* #{ts} | PID: #{process_id} | line: #{line.inspect} | result: #{result.inspect} | output: #{output.inspect} | message: #{message.inspect}" if @verbose
-          #       else
-          #         warn "* #{ts} | PID: #{process_id} | skipping line: #{line.inspect} | result: #{result.inspect} | output: #{output.inspect} | message: #{message.inspect}" if @verbose
-          #         next
-          #       end
-
-          #       message = JSON.parse(message, symbolize_names: true)
-          #       message[:process_id] = process_id
-          #       @messages << message
-          #     end
-
-          #     @messages << { type: "exit", process_id: process_id }
-
-          #     unless stderr_s.empty?
-          #       STDERR.write(stderr_s)
-          #     end
-
-          #     unless wait_thr.success?
-          #       @messages << { type: "error" }
-          #     end
-
-          #     @wait_thr_statuses << wait_thr.exitstatus
-          #   end
+          # popen3_select(env, command, process_id)
+          # popen3_select_reverse(env, command, process_id)
+          capture3(env, command, process_id)
         else
-          warn "* #{ts} | PID: #{process_id} | before popen3" if @verbose
+          popen3(env, command, process_id)
+        end
+      end
+    end
 
-          stdin, stdout, stderr, wait_thr = Open3.popen3(env, *command)
+    def popen3(env, command, process_id)
+      warn "* #{ts} | PID: #{process_id} | before popen3" if @verbose
 
-          warn "* #{ts} | PID: #{process_id} | after popen3" if @verbose
+      stdin, stdout, stderr, wait_thr = Open3.popen3(env, *command)
 
-          stdin.close
+      warn "* #{ts} | PID: #{process_id} | after popen3" if @verbose
 
-          warn "* #{ts} | PID: #{process_id} | after stdin.close" if @verbose
+      stdin.close
 
-          @threads <<
-            Thread.new do
-              stdout.each_line do |line|
-                result = line.split(env["RSPEC_FORMATTER_OUTPUT_ID"])
+      warn "* #{ts} | PID: #{process_id} | after stdin.close" if @verbose
 
-                output = result.shift
+      @threads <<
+        Thread.new do
+          stdout.each_line do |line|
+            result = line.split(env["RSPEC_FORMATTER_OUTPUT_ID"])
 
-                unless output.empty?
-                  warn "* #{ts} | PID: #{process_id} | line: #{line.inspect} | result: #{result.inspect} | extra output: #{output.inspect}" if @verbose
-                  print(output)
-                end
+            output = result.shift
 
-                message = result.shift
-                # next unless message
-
-                if message
-                  warn "* #{ts} | PID: #{process_id} | line: #{line.inspect} | result: #{result.inspect} | output: #{output.inspect} | message: #{message.inspect}" if @verbose
-                else
-                  warn "* #{ts} | PID: #{process_id} | skipping line: #{line.inspect} | result: #{result.inspect} | output: #{output.inspect} | message: #{message.inspect}" if @verbose
-                  next
-                end
-
-                message = JSON.parse(message, symbolize_names: true)
-                message[:process_id] = process_id
-                @messages << message
-              end
-
-              warn "* #{ts} | PID: #{process_id} | marking process to exit" if @verbose
-              @messages << { type: "exit", process_id: process_id }
-            rescue => thread_error
-              warn "! #{ts} | Thread error | PID: #{process_id} | #{thread_error.class} | #{thread_error.message} | #{thread_error.backtrace} | #{env["RSPEC_FORMATTER_OUTPUT_ID"]}" if @verbose
-              raise thread_error
+            unless output.empty?
+              warn "* #{ts} | PID: #{process_id} | line: #{line.inspect} | result: #{result.inspect} | extra output: #{output.inspect}" if @verbose
+              print(output)
             end
 
-          warn "* #{ts} | PID: #{process_id} | start copy thread" if @verbose
-          @threads << start_copy_thread(stderr, STDERR, process_id)
+            message = result.shift
+            # next unless message
 
-          warn "* #{ts} | PID: #{process_id} | << error" if @verbose
-          @threads << Thread.new do
-            unless wait_thr.value.success?
-              @messages << { type: "error" }
+            if message
+              warn "* #{ts} | PID: #{process_id} | line: #{line.inspect} | result: #{result.inspect} | output: #{output.inspect} | message: #{message.inspect}" if @verbose
+            else
+              warn "* #{ts} | PID: #{process_id} | skipping line: #{line.inspect} | result: #{result.inspect} | output: #{output.inspect} | message: #{message.inspect}" if @verbose
+              next
+            end
+
+            message = JSON.parse(message, symbolize_names: true)
+            message[:process_id] = process_id
+            @messages << message
+          end
+
+          warn "* #{ts} | PID: #{process_id} | marking process to exit" if @verbose
+          @messages << { type: "exit", process_id: process_id }
+        rescue => thread_error
+          warn "! #{ts} | Thread error | PID: #{process_id} | #{thread_error.class} | #{thread_error.message} | #{thread_error.backtrace} | #{env["RSPEC_FORMATTER_OUTPUT_ID"]}" if @verbose
+          raise thread_error
+        end
+
+      warn "* #{ts} | PID: #{process_id} | start copy thread" if @verbose
+      @threads << start_copy_thread(stderr, STDERR, process_id)
+
+      warn "* #{ts} | PID: #{process_id} | << error" if @verbose
+      @threads << Thread.new do
+        unless wait_thr.value.success?
+          @messages << { type: "error" }
+        end
+      end
+
+      warn "* #{ts} | PID: #{process_id} | return wait_thr" if @verbose
+      wait_thr
+    end
+
+    def popen3_select(env, command, process_id)
+      @threads << Thread.new do
+        warn "* #{ts} | PID: #{process_id} | before popen3+select" if @verbose
+
+        Open3.popen3(env, *command) do |i, o, e, wait_thr|
+          i.close
+          readables = [o, e]
+          stdout = []
+          stderr = []
+
+          warn "* #{ts} | PID: #{process_id} | before read_nonblock" if @verbose
+
+          loop do
+            break if readables.empty?
+
+            warn "* #{ts} | PID: #{process_id} | readables: #{readables}" if @verbose
+
+            readable, = IO.select(readables)
+
+            if readable.nil?
+              warn "* #{ts} | PID: #{process_id} | no ready streams" if @verbose
+              break
+            end
+
+            warn "* #{ts} | PID: #{process_id} | readable: #{readable.inspect}" if @verbose
+
+            if readable.include?(o)
+              begin
+                warn "* #{ts} | PID: #{process_id} | o_read before" if @verbose
+                o_read = o.read_nonblock(4096)
+                warn "* #{ts} | PID: #{process_id} | o_read after: #{o_read.inspect}" if @verbose
+
+                stdout << o_read
+              rescue EOFError
+                warn "* #{ts} | PID: #{process_id} | o_delete, readables before: #{readables}" if @verbose
+                readables.delete(o)
+                warn "* #{ts} | PID: #{process_id} | o_delete, readables after: #{readables}" if @verbose
+              rescue => error
+                warn "* #{ts} | PID: #{process_id} | o other error: #{error.class}, #{error.message}" if @verbose
+                raise error
+              end
+            end
+
+            if readable.include?(e)
+              begin
+                warn "* #{ts} | PID: #{process_id} | e_read before" if @verbose
+                e_read = e.read_nonblock(4096)
+                warn "* #{ts} | PID: #{process_id} | e_read after: #{e_read.inspect}" if @verbose
+
+                stderr << e_read
+              rescue EOFError
+                warn "* #{ts} | PID: #{process_id} | e_delete, readables before: #{readables}" if @verbose
+                readables.delete(e)
+                warn "* #{ts} | PID: #{process_id} | e_delete, readables after: #{readables}" if @verbose
+              rescue => error
+                warn "* #{ts} | PID: #{process_id} | e other error: #{error.class}, #{error.message}" if @verbose
+                raise error
+              end
+            end
+
+            warn "* #{ts} | PID: #{process_id} | outside include checks, readables: #{readables}, readable: #{readable}" if @verbose
+          end
+
+          warn "* #{ts} | PID: #{process_id} | after read blocks" if @verbose
+
+          stdout_s = stdout.join
+          stderr_s = stderr.join
+
+          warn "* #{ts} | PID: #{process_id} | before each_line parsing, size: #{stdout_s.size}" if @verbose
+
+          stdout_s.each_line do |line|
+            result = line.split(env["RSPEC_FORMATTER_OUTPUT_ID"])
+
+            output = result.shift
+
+            unless output.empty?
+              warn "* #{ts} | PID: #{process_id} | line: #{line.inspect} | result: #{result.inspect} | extra output: #{output.inspect}" if @verbose
+              print(output)
+            end
+
+            message = result.shift
+            # next unless message
+
+            if message
+              warn "* #{ts} | PID: #{process_id} | line: #{line.inspect} | result: #{result.inspect} | output: #{output.inspect} | message: #{message.inspect}" if @verbose
+            else
+              warn "* #{ts} | PID: #{process_id} | skipping line: #{line.inspect} | result: #{result.inspect} | output: #{output.inspect} | message: #{message.inspect}" if @verbose
+              next
+            end
+
+            message = JSON.parse(message, symbolize_names: true)
+            message[:process_id] = process_id
+            @messages << message
+          end
+
+          warn "* #{ts} | PID: #{process_id} | before stderr write, size: #{stderr_s.size}" if @verbose
+
+          unless stderr_s.empty?
+            STDERR.puts(stderr_s)
+          end
+
+          warn "* #{ts} | PID: #{process_id} | before checking wait_thr status" if @verbose
+          warn "* #{ts} | PID: #{process_id} | wait_thr status: #{wait_thr.value.exitstatus}" if @verbose
+
+          unless wait_thr.value.success?
+            @messages << { type: "error" }
+          end
+
+          warn "* #{ts} | PID: #{process_id} | before exit message" if @verbose
+
+          @messages << { type: "exit", process_id: process_id }
+
+          @wait_thr_statuses << wait_thr.value.exitstatus
+        end
+
+        warn "* #{ts} | PID: #{process_id} | after popen3+select" if @verbose
+      end
+    end
+
+    def popen3_select_reverse(env, command, process_id)
+      @threads << Thread.new do
+        warn "* #{ts} | PID: #{process_id} | before popen3+select reverse" if @verbose
+
+        Open3.popen3(env, *command) do |i, o, e, wait_thr|
+          i.close
+          stdout = []
+          stderr = []
+
+          warn "* #{ts} | PID: #{process_id} | before read blocks" if @verbose
+
+          loop do
+            begin
+              warn "* #{ts} | PID: #{process_id} | before o_read" if @verbose
+              o_read = o.read_nonblock(4096)
+              warn "* #{ts} | PID: #{process_id} | after o_read: #{o_read.inspect}" if @verbose
+
+              stdout << o_read
+            rescue IO::WaitReadable
+              warn "* #{ts} | PID: #{process_id} | o WaitReadable before select" if @verbose
+              selected = IO.select([o], nil, nil, 10)
+
+              if selected.nil?
+                warn "* #{ts} | PID: #{process_id} | o WaitReadable no ready streams" if @verbose
+                break
+              end
+
+              warn "* #{ts} | PID: #{process_id} | o WaitReadable after select: #{selected.inspect}" if @verbose
+              retry
+            rescue EOFError
+              warn "* #{ts} | PID: #{process_id} | o eof" if @verbose
+              break
             end
           end
 
-          warn "* #{ts} | PID: #{process_id} | return wait_thr" if @verbose
-          wait_thr
+          loop do
+            begin
+              warn "* #{ts} | PID: #{process_id} | before e_read" if @verbose
+              e_read = e.read_nonblock(4096)
+              warn "* #{ts} | PID: #{process_id} | after e_read: #{e_read.inspect}" if @verbose
+
+              stderr << e_read
+            rescue IO::WaitReadable
+              warn "* #{ts} | PID: #{process_id} | e WaitReadable before select" if @verbose
+              selected = IO.select([e], nil, nil, 10)
+
+              if selected.nil?
+                warn "* #{ts} | PID: #{process_id} | e WaitReadable no ready streams" if @verbose
+                break
+              end
+
+              warn "* #{ts} | PID: #{process_id} | e WaitReadable after select: #{selected.inspect}" if @verbose
+              retry
+            rescue EOFError
+              warn "* #{ts} | PID: #{process_id} | e eof" if @verbose
+              break
+            end
+          end
+
+          warn "* #{ts} | PID: #{process_id} | after read blocks" if @verbose
+
+          stdout_s = stdout.join
+          stderr_s = stderr.join
+
+          warn "* #{ts} | PID: #{process_id} | before each_line parsing, size: #{stdout_s.size}" if @verbose
+
+          stdout_s.each_line do |line|
+            result = line.split(env["RSPEC_FORMATTER_OUTPUT_ID"])
+
+            output = result.shift
+
+            unless output.empty?
+              warn "* #{ts} | PID: #{process_id} | line: #{line.inspect} | result: #{result.inspect} | extra output: #{output.inspect}" if @verbose
+              print(output)
+            end
+
+            message = result.shift
+            # next unless message
+
+            if message
+              warn "* #{ts} | PID: #{process_id} | line: #{line.inspect} | result: #{result.inspect} | output: #{output.inspect} | message: #{message.inspect}" if @verbose
+            else
+              warn "* #{ts} | PID: #{process_id} | skipping line: #{line.inspect} | result: #{result.inspect} | output: #{output.inspect} | message: #{message.inspect}" if @verbose
+              next
+            end
+
+            message = JSON.parse(message, symbolize_names: true)
+            message[:process_id] = process_id
+            @messages << message
+          end
+
+          warn "* #{ts} | PID: #{process_id} | before stderr write, size: #{stderr_s.size}" if @verbose
+
+          unless stderr_s.empty?
+            STDERR.puts(stderr_s)
+          end
+
+          warn "* #{ts} | PID: #{process_id} | before checking wait_thr status" if @verbose
+          warn "* #{ts} | PID: #{process_id} | wait_thr status: #{wait_thr.value.exitstatus}" if @verbose
+
+          unless wait_thr.value.success?
+            @messages << { type: "error" }
+          end
+
+          warn "* #{ts} | PID: #{process_id} | before exit message" if @verbose
+
+          @messages << { type: "exit", process_id: process_id }
+
+          @wait_thr_statuses << wait_thr.value.exitstatus
         end
+
+        warn "* #{ts} | PID: #{process_id} | after popen3+select reverse" if @verbose
+      end
+    end
+
+    def capture3(env, command, process_id)
+      @threads << Thread.new do
+        warn "* #{ts} | PID: #{process_id} | before capture3" if @verbose
+
+        stdout_s, stderr_s, wait_thr = Open3.capture3(env, *command)
+
+        warn "* #{ts} | PID: #{process_id} | after capture3" if @verbose
+
+        stdout_s.each_line do |line|
+          result = line.split(env["RSPEC_FORMATTER_OUTPUT_ID"])
+
+          output = result.shift
+
+          unless output.empty?
+            warn "* #{ts} | PID: #{process_id} | line: #{line.inspect} | result: #{result.inspect} | extra output: #{output.inspect}" if @verbose
+            print(output)
+          end
+
+          message = result.shift
+          # next unless message
+
+          if message
+            warn "* #{ts} | PID: #{process_id} | line: #{line.inspect} | result: #{result.inspect} | output: #{output.inspect} | message: #{message.inspect}" if @verbose
+          else
+            warn "* #{ts} | PID: #{process_id} | skipping line: #{line.inspect} | result: #{result.inspect} | output: #{output.inspect} | message: #{message.inspect}" if @verbose
+            next
+          end
+
+          message = JSON.parse(message, symbolize_names: true)
+          message[:process_id] = process_id
+          @messages << message
+        end
+
+        warn "* #{ts} | PID: #{process_id} | before stderr write, size: #{stderr_s.size}" if @verbose
+
+        unless stderr_s.empty?
+          STDERR.write(stderr_s)
+        end
+
+        warn "* #{ts} | PID: #{process_id} | after stderr write, size: #{stderr_s.size}" if @verbose
+
+        unless wait_thr.success?
+          @messages << { type: "error" }
+        end
+
+        warn "* #{ts} | PID: #{process_id} | marking process to exit" if @verbose
+        @messages << { type: "exit", process_id: process_id }
+
+        warn "* #{ts} | PID: #{process_id} | pushing exitstatus" if @verbose
+
+        @wait_thr_statuses << wait_thr.exitstatus
       end
     end
 
