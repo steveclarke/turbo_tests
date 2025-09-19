@@ -299,6 +299,18 @@ module TurboTests
 
           warn "* #{ts} | PID: #{process_id} | after stdin.close" if @verbose
 
+          if RUBY_PLATFORM.include?("linux")
+            warn "* #{ts} | PID: #{process_id} | linux detected" if @verbose
+
+            warn "* #{ts} | PID: #{process_id} | o pipe buffer size: #{o.fcntl(1032)}" if @verbose
+            o.fcntl(1031, 1048576) # 1MB
+            warn "* #{ts} | PID: #{process_id} | o pipe buffer size: #{o.fcntl(1032)}" if @verbose
+
+            warn "* #{ts} | PID: #{process_id} | e pipe buffer size: #{e.fcntl(1032)}" if @verbose
+            e.fcntl(1031, 1048576) # 1MB
+            warn "* #{ts} | PID: #{process_id} | e pipe buffer size: #{e.fcntl(1032)}" if @verbose
+          end
+
           @threads << Thread.new do
             stdout.each_line do |line|
               result = line.split(env["RSPEC_FORMATTER_OUTPUT_ID"])
