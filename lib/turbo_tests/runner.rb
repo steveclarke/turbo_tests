@@ -333,8 +333,8 @@ module TurboTests
             end
           end
 
-          warn "* #{ts} | PID: #{process_id} | start copy thread" if @verbose
-          @threads << start_copy_thread_safe(stderr, STDERR, process_id)
+          # warn "* #{ts} | PID: #{process_id} | start copy thread" if @verbose
+          # @threads << start_copy_thread_safe(stderr, STDERR, process_id)
 
           warn "* #{ts} | PID: #{process_id} | before wait_thr join" if @verbose
           wait_thr.join
