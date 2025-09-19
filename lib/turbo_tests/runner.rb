@@ -264,6 +264,8 @@ module TurboTests
             message = JSON.parse(message, symbolize_names: true)
             message[:process_id] = process_id
             @messages << message
+
+            break if message[:type] == "close"
           end
 
           warn "* #{ts} | PID: #{process_id} | marking process to exit" if @verbose
