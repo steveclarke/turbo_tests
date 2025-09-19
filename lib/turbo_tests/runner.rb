@@ -606,13 +606,13 @@ module TurboTests
             message[:process_id] = process_id
             @messages << message
           else
-            warn "* #{ts} | PID: #{process_id} | before stderr write, size: #{stderr_s.size}" if @verbose
+            warn "* #{ts} | PID: #{process_id} | before stderr line write, size: #{line.size}, content: #{line.inspect}" if @verbose
 
-            unless stderr_s.empty?
-              STDERR.write(stderr_s)
+            unless line.empty?
+              STDERR.write(line)
             end
 
-            warn "* #{ts} | PID: #{process_id} | after stderr write, size: #{stderr_s.size}" if @verbose
+            warn "* #{ts} | PID: #{process_id} | after stderr line write, size: #{line.size}, content: #{line.inspect}" if @verbose
           end
         end
 
