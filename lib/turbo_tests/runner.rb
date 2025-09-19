@@ -276,7 +276,7 @@ module TurboTests
         end
 
       warn "* #{ts} | PID: #{process_id} | start copy thread" if @verbose
-      @threads << start_copy_thread(stderr, STDERR, process_id)
+      @threads << start_copy_thread_safe(stderr, STDERR, process_id)
 
       warn "* #{ts} | PID: #{process_id} | << error" if @verbose
       @threads << Thread.new do
@@ -813,6 +813,28 @@ module TurboTests
         else
           warn "$ #{ts} | PID: #{process_id} | SCT else | #{msg.inspect}" if @verbose
           dst.write(msg)
+        end
+      end
+    end
+
+    def start_copy_thread_safe(src, dst, process_id)
+      Thread.new do
+        loop do
+          warn "$ #{ts} | PID: #{process_id} | before SCT read" if @verbose
+          part = src.read_nonblock(4096)
+          warn "$ #{ts} | PID: #{process_id} | SCT read | #{part.inspect}" if @verbose
+          part
+        rescue IO::WaitReadable
+          warn "$ #{ts} | PID: #{process_id} | SCT WaitReadable before select" if @verbose
+          IO.select([src])
+          warn "$ #{ts} | PID: #{process_id} | SCT WaitReadable after select" if @verbose
+        rescue EOFError
+          warn "$ #{ts} | PID: #{process_id} | SCT EOFError" if @verbose
+          src.close
+          break
+        else
+          warn "$ #{ts} | PID: #{process_id} | SCT else | #{part.inspect}" if @verbose
+          dst.write(part)
         end
       end
     end
