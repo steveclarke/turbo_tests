@@ -221,7 +221,8 @@ module TurboTests
           # capture3(env, command, process_id)
           # capture2e(env, command, process_id)
           # popen2e(env, command, process_id)
-          popen2e_sync(env, command, process_id)
+          # popen2e_sync(env, command, process_id)
+          popen3_hybrid(env, command, process_id)
         else
           popen3(env, command, process_id)
         end
@@ -287,6 +288,68 @@ module TurboTests
 
       warn "* #{ts} | PID: #{process_id} | return wait_thr" if @verbose
       wait_thr
+    end
+
+    def popen3_hybrid(env, command, process_id)
+      @threads << Thread.new do
+        warn "* #{ts} | PID: #{process_id} | before popen3 hybrid" if @verbose
+
+        Open3.popen3(env, *command) do |stdin, stdout, stderr, wait_thr|
+          stdin.close
+
+          warn "* #{ts} | PID: #{process_id} | after stdin.close" if @verbose
+
+          @threads << Thread.new do
+            stdout.each_line do |line|
+              result = line.split(env["RSPEC_FORMATTER_OUTPUT_ID"])
+
+              output = result.shift
+
+              unless output.empty?
+                warn "* #{ts} | PID: #{process_id} | line: #{line.inspect} | result: #{result.inspect} | extra output: #{output.inspect}" if @verbose
+                print(output)
+              end
+
+              message = result.shift
+              # next unless message
+
+              if message
+                warn "* #{ts} | PID: #{process_id} | line: #{line.inspect} | result: #{result.inspect} | output: #{output.inspect} | message: #{message.inspect}" if @verbose
+              else
+                warn "* #{ts} | PID: #{process_id} | skipping line: #{line.inspect} | result: #{result.inspect} | output: #{output.inspect} | message: #{message.inspect}" if @verbose
+                next
+              end
+
+              message = JSON.parse(message, symbolize_names: true)
+              message[:process_id] = process_id
+              @messages << message
+
+              if message[:type] == "close"
+                warn "* #{ts} | PID: #{process_id} | marking process to exit" if @verbose
+                @messages << { type: "exit", process_id: process_id }
+
+                break
+              end
+            end
+          end
+
+          warn "* #{ts} | PID: #{process_id} | start copy thread" if @verbose
+          @threads << start_copy_thread_safe(stderr, STDERR, process_id)
+
+          warn "* #{ts} | PID: #{process_id} | before wait_thr join" if @verbose
+          wait_thr.join
+          warn "* #{ts} | PID: #{process_id} | after wait_thr join" if @verbose
+
+          warn "* #{ts} | PID: #{process_id} | << error" if @verbose
+          unless wait_thr.value.success?
+            @messages << { type: "error" }
+          end
+
+          @wait_thr_statuses << wait_thr.value.exitstatus
+        end
+
+        warn "* #{ts} | PID: #{process_id} | after popen3 hybrid" if @verbose
+      end
     end
 
     def popen3_select(env, command, process_id)
