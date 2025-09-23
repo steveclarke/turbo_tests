@@ -95,32 +95,32 @@ module TurboTests
       @reporter.report(tests_in_groups) do |reporter|
         warn "* #{ts} | Before spawning subprocesses" if @verbose
 
-        if @sync_log
-          @wait_thr_statuses = []
+        # if @sync_log
+        #   @wait_thr_statuses = []
 
-          tests_in_groups.each_with_index do |tests, process_id|
-            start_regular_subprocess(tests, process_id + 1, **subprocess_opts)
-          end
+        #   tests_in_groups.each_with_index do |tests, process_id|
+        #     start_regular_subprocess(tests, process_id + 1, **subprocess_opts)
+        #   end
 
-          warn "* #{ts} | Before 'handle_messages'" if @verbose
+        #   warn "* #{ts} | Before 'handle_messages'" if @verbose
 
-          handle_messages
+        #   handle_messages
 
-          warn "* #{ts} | After 'handle_messages'" if @verbose
+        #   warn "* #{ts} | After 'handle_messages'" if @verbose
 
-          @threads.each(&:join)
+        #   @threads.each(&:join)
 
-          warn "* #{ts} | After threads join" if @verbose
+        #   warn "* #{ts} | After threads join" if @verbose
 
-          if @reporter.failed_examples.empty? && @wait_thr_statuses.all? { |s| s == 0 }
-            warn "* #{ts} | Fast 0 return" if @verbose
-            0
-          else
-            warn "* #{ts} | Wait threads max" if @verbose
+        #   if @reporter.failed_examples.empty? && @wait_thr_statuses.all? { |s| s == 0 }
+        #     warn "* #{ts} | Fast 0 return" if @verbose
+        #     0
+        #   else
+        #     warn "* #{ts} | Wait threads max" if @verbose
 
-            @wait_thr_statuses.max
-          end
-        else
+        #     @wait_thr_statuses.max
+        #   end
+        # else
           wait_threads = tests_in_groups.map.with_index do |tests, process_id|
             start_regular_subprocess(tests, process_id + 1, **subprocess_opts)
           end
@@ -144,7 +144,7 @@ module TurboTests
             # From https://github.com/serpapi/turbo_tests/pull/20/
             wait_threads.map { |thread| thread.value.exitstatus }.max
           end
-        end
+        # end
       end
     end
 
@@ -220,9 +220,9 @@ module TurboTests
           # popen3_select_reverse(env, command, process_id)
           # capture3(env, command, process_id)
           # capture2e(env, command, process_id)
-          # popen2e(env, command, process_id)
+          popen2e(env, command, process_id)
           # popen2e_sync(env, command, process_id)
-          popen3_hybrid(env, command, process_id)
+          # popen3_hybrid(env, command, process_id)
         else
           popen3(env, command, process_id)
         end
@@ -751,6 +751,13 @@ module TurboTests
               message = JSON.parse(message, symbolize_names: true)
               message[:process_id] = process_id
               @messages << message
+
+              if message[:type] == "close"
+                warn "* #{ts} | PID: #{process_id} | marking process to exit" if @verbose
+                @messages << { type: "exit", process_id: process_id }
+
+                break
+              end
             else
               warn "* #{ts} | PID: #{process_id} | before stderr line write, size: #{line.size}, content: #{line.inspect}" if @verbose
 
