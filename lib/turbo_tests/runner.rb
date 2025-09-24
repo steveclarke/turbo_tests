@@ -254,8 +254,6 @@ module TurboTests
 
       warn "* #{ts} | PID: #{process_id} | after stdin.close" if @verbose
 
-      increase_pipe_buffer_size(stdout, stderr, process_id)
-
       @threads <<
         Thread.new do
           stdout.each_line do |line|
@@ -281,8 +279,6 @@ module TurboTests
             message = JSON.parse(message, symbolize_names: true)
             message[:process_id] = process_id
             @messages << message
-
-            break if message[:type] == "close"
           end
 
           warn "* #{ts} | PID: #{process_id} | marking process to exit" if @verbose
