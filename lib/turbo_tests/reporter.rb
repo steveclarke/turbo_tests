@@ -73,6 +73,7 @@ module TurboTests
         RSpec::Core::Notifications::SeedNotification.new(@seed, @seed_used))
       delegate_to_formatters(:start,
         RSpec::Core::Notifications::StartNotification.new(total, @load_time))
+      delegate_to_formatters(:turbo_start, @example_groups)
     end
 
     def report_number_of_tests(groups)
