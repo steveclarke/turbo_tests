@@ -52,13 +52,10 @@ module TurboTests
       @seed = opts[:seed]
       @seed_used = opts[:seed_used]
 
-      @load_time = 0
-      @load_count = 0
       @failure_count = 0
 
       @messages = Thread::Queue.new
       @threads = []
-      @error = false
       @buffered_messages = []
     end
 
@@ -322,14 +319,11 @@ module TurboTests
       when "message"
         if message[:message].include?("An error occurred") || message[:message].include?("occurred outside of examples")
           @reporter.error_outside_of_examples(message[:message])
-          @error = true
         else
           @reporter.message(message[:message])
         end
-      when "seed"
-      when "close"
-      when "error"
-        nil
+      when "seed", "close", "error"
+        # Handled by subprocess; no action needed in main process.
       when "exit"
         @reporter.current_process_id = nil
         return :exit

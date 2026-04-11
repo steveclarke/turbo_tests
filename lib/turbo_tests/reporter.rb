@@ -35,7 +35,6 @@ module TurboTests
       @errors_outside_of_examples_count = 0
       @current_process_id = nil
       @example_groups = nil
-      @total_example_count = 0
     end
 
     def add(name, outputs)
@@ -67,7 +66,6 @@ module TurboTests
     def start_with_example_count(total, per_worker_counts = {})
       @start = RSpec::Core::Time.now
       @load_time = (@start - @start_time).to_f
-      @total_example_count = total
 
       delegate_to_formatters(:seed,
         RSpec::Core::Notifications::SeedNotification.new(@seed, @seed_used))
@@ -141,7 +139,6 @@ module TurboTests
     def finish
       end_time = RSpec::Core::Time.now
 
-      @duration = end_time - @start_time
       delegate_to_formatters :stop, RSpec::Core::Notifications::ExamplesNotification.new(self)
 
       delegate_to_formatters :start_dump, RSpec::Core::Notifications::NullNotification
