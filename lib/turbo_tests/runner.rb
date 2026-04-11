@@ -59,6 +59,7 @@ module TurboTests
       @messages = Thread::Queue.new
       @threads = []
       @error = false
+      @buffered_messages = []
     end
 
     def run
@@ -221,58 +222,122 @@ module TurboTests
     end
 
     def handle_messages
+      collect_load_summaries
+      dispatch_messages
+    end
+
+    def collect_load_summaries
+      total_examples = 0
+      remaining = @num_processes
+
+      while remaining > 0
+        message = @messages.pop
+
+        case message[:type]
+        when "load_summary"
+          summary = message[:summary]
+          total_examples += summary[:count]
+          @reporter.load_time = summary[:load_time]
+          remaining -= 1
+        when "exit"
+          # Worker with empty tests exits without load_summary
+          remaining -= 1
+          @buffered_messages << message
+        else
+          @buffered_messages << message
+        end
+      end
+
+      @reporter.start_with_example_count(total_examples)
+    end
+
+    def dispatch_messages
       exited = 0
+
+      @buffered_messages.each do |msg|
+        result = dispatch_message(msg)
+        case result
+        when :exit
+          exited += 1
+        when :break
+          @buffered_messages.clear
+          return
+        end
+      end
+      @buffered_messages.clear
+      STDOUT.flush
+
+      if exited == @num_processes
+        @reporter.all_workers_finished
+        return
+      end
 
       loop do
         message = @messages.pop
-        case message[:type]
-        when "example_passed"
-          example = FakeExample.from_obj(message[:example])
-          @reporter.example_passed(example)
-        when "group_started"
-          @reporter.group_started(message[:group].to_struct)
-        when "group_finished"
-          @reporter.group_finished
-        when "example_pending"
-          example = FakeExample.from_obj(message[:example])
-          @reporter.example_pending(example)
-        when "load_summary"
-          message = message[:summary]
-          # NOTE: notifications order and content is not guaranteed hence the fetch
-          #       and count increment tracking to get the latest accumulated load time
-          @reporter.load_time = message[:load_time] if message.fetch(:count, 0) > @load_count
-        when "example_failed"
-          example = FakeExample.from_obj(message[:example])
-          @reporter.example_failed(example)
-          @failure_count += 1
-          if fail_fast_met
-            @threads.each(&:kill)
-            break
-          end
-        when "message"
-          if message[:message].include?("An error occurred") || message[:message].include?("occurred outside of examples")
-            @reporter.error_outside_of_examples(message[:message])
-            @error = true
-          else
-            @reporter.message(message[:message])
-          end
-        when "seed"
-        when "close"
-        when "error"
-          # Do nothing
-          nil
-        when "exit"
+        result = dispatch_message(message)
+
+        case result
+        when :exit
           exited += 1
           if exited == @num_processes
+            @reporter.all_workers_finished
             break
           end
-        else
-          STDERR.puts("Unhandled message in main process: #{message}")
+        when :break
+          break
         end
 
         STDOUT.flush
       end
     rescue Interrupt
+    end
+
+    def dispatch_message(message)
+      @reporter.current_process_id = message[:process_id]
+
+      case message[:type]
+      when "example_passed"
+        example = FakeExample.from_obj(message[:example])
+        @reporter.example_passed(example)
+      when "group_started"
+        @reporter.group_started(message[:group].to_struct)
+      when "group_finished"
+        @reporter.group_finished
+      when "example_pending"
+        example = FakeExample.from_obj(message[:example])
+        @reporter.example_pending(example)
+      when "example_failed"
+        example = FakeExample.from_obj(message[:example])
+        @reporter.example_failed(example)
+        @failure_count += 1
+        if fail_fast_met
+          @threads.each(&:kill)
+          return :break
+        end
+      when "file_started"
+        @reporter.file_started(message[:process_id], message[:file])
+      when "file_completed"
+        @reporter.file_completed(message[:process_id])
+      when "message"
+        if message[:message].include?("An error occurred") || message[:message].include?("occurred outside of examples")
+          @reporter.error_outside_of_examples(message[:message])
+          @error = true
+        else
+          @reporter.message(message[:message])
+        end
+      when "seed"
+      when "close"
+      when "error"
+        nil
+      when "exit"
+        @reporter.current_process_id = nil
+        return :exit
+      else
+        STDERR.puts("Unhandled message in main process: #{message}")
+      end
+
+      @reporter.current_process_id = nil
+      nil
     end
 
     def fail_fast_met
