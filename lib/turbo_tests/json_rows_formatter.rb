@@ -37,6 +37,7 @@ module TurboTests
 
     def initialize(output)
       @output = output
+      @depth = 0
     end
 
     def start(notification)
@@ -47,17 +48,19 @@ module TurboTests
     end
 
     def example_group_started(notification)
-      output_row(
-        type: :group_started,
-        group: group_to_json(notification)
-      )
+      @depth += 1
+      if @depth == 1
+        output_row(type: :file_started, file: notification.group.file_path)
+      end
+      output_row(type: :group_started, group: group_to_json(notification))
     end
 
     def example_group_finished(notification)
-      output_row(
-        type: :group_finished,
-        group: group_to_json(notification)
-      )
+      output_row(type: :group_finished, group: group_to_json(notification))
+      @depth -= 1
+      if @depth == 0
+        output_row(type: :file_completed)
+      end
     end
 
     def example_passed(notification)
