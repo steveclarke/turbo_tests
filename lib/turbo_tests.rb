@@ -16,6 +16,7 @@ require "turbo_tests/json_rows_formatter"
 
 module TurboTests
   autoload :CLI, "turbo_tests/cli"
+  autoload :TurboProgress, "turbo_tests/turbo_progress"
   autoload :VERSION, "turbo_tests/version"
 
   FakeException = Struct.new(:backtrace, :message, :cause)
