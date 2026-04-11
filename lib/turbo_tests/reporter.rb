@@ -64,7 +64,7 @@ module TurboTests
       end
     end
 
-    def start_with_example_count(total)
+    def start_with_example_count(total, per_worker_counts = {})
       @start = RSpec::Core::Time.now
       @load_time = (@start - @start_time).to_f
       @total_example_count = total
@@ -73,7 +73,7 @@ module TurboTests
         RSpec::Core::Notifications::SeedNotification.new(@seed, @seed_used))
       delegate_to_formatters(:start,
         RSpec::Core::Notifications::StartNotification.new(total, @load_time))
-      delegate_to_formatters(:turbo_start, @example_groups)
+      delegate_to_formatters(:turbo_start, @example_groups, per_worker_counts)
     end
 
     def report_number_of_tests(groups)

@@ -228,6 +228,7 @@ module TurboTests
 
     def collect_load_summaries
       total_examples = 0
+      per_worker_counts = {}
       remaining = @num_processes
 
       while remaining > 0
@@ -237,10 +238,10 @@ module TurboTests
         when "load_summary"
           summary = message[:summary]
           total_examples += summary[:count]
+          per_worker_counts[message[:process_id]] = summary[:count]
           @reporter.load_time = summary[:load_time]
           remaining -= 1
         when "exit"
-          # Worker with empty tests exits without load_summary
           remaining -= 1
           @buffered_messages << message
         else
@@ -248,7 +249,7 @@ module TurboTests
         end
       end
 
-      @reporter.start_with_example_count(total_examples)
+      @reporter.start_with_example_count(total_examples, per_worker_counts)
     end
 
     def dispatch_messages
